@@ -1,0 +1,39 @@
+{
+  "name": "donutdot-bot",
+  "version": "1.0.0",
+  "description": "DonutDot Bot (@DonutDot_bot) - A Telegram matchmaking bot with Daily Pass monetization and Truth-or-Dare features",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build step required'",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:setup": "node scripts/test_setup.js",
+    "init-db": "node scripts/init_db.js",
+    "install:sqlite": "npm install better-sqlite3 --save-optional",
+    "verify": "node verify-setup.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "matchmaking",
+    "razorpay",
+    "vercel"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^9.2.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
