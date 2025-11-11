@@ -19,10 +19,15 @@ import {
 import { getNextCandidate, getUserPreferences } from '../lib/matcher.js';
 import { sendMessage, sendInlineKeyboard, answerCallbackQuery, editMessageText } from '../lib/telegram.js';
 import { createPaymentLink } from '../lib/razorpay.js';
+import { AI_GIRL, getAIResponse, simulateTyping } from '../lib/aiGirl.js';
 
 // In-memory state for onboarding flow
 // TODO: Replace with Redis for production scalability
 const onboardingState = new Map();
+
+// Track AI girl chat sessions
+// Structure: { chatId: { messageCount: 0, startTime: timestamp, sessionId: id } }
+const aiChatSessions = new Map();
 
 // Simple rate limiting (in-memory)
 const rateLimits = new Map();
@@ -71,8 +76,13 @@ export default async function handler(req, res) {
       if (text.startsWith('/')) {
         await handleCommand(chatId, text, update.message);
       } else {
-        // Handle onboarding flow responses
-        await handleOnboardingResponse(chatId, text, update.message);
+        // Check if user is in active AI chat session
+        const handledByAI = await handleAIChatMessage(chatId, text);
+        
+        if (!handledByAI) {
+          // Handle onboarding flow responses
+          await handleOnboardingResponse(chatId, text, update.message);
+        }
       }
     }
     
@@ -221,11 +231,12 @@ async function handleOnboardingResponse(chatId, text, message) {
         await sendMessage(
           chatId,
           `✅ Profile created successfully!\n\n` +
-          `Welcome to DonutDot, ${state.name}! 🎉`
+          `Welcome to DonutDot, ${state.name}! 🎉\n\n` +
+          `🎁 Surprise! You have an instant match!`
         );
         
-        // Show main menu
-        await showMainMenu(chatId, state.name);
+        // Auto-match with AI girl for demo/retention
+        await startAIChat(chatId, state.name);
         break;
       
       case 'edit_bio':
@@ -667,3 +678,87 @@ async function handleTruthDare(chatId, targetId, callbackQueryId, messageId) {
     await answerCallbackQuery(callbackQueryId, 'An error occurred', true);
   }
 }
+
+/**
+ * Start AI girl chat session
+ */
+async function startAIChat(chatId, userName) {
+  const now = Date.now();
+  const sessionId = `ai_${chatId}_${now}`;
+  
+  // Initialize AI chat session
+  aiChatSessions.set(chatId, {
+    messageCount: 0,
+    startTime: now,
+    sessionId: sessionId,
+    timeLimit: 180000, // 3 minutes in milliseconds
+    hasWarned: false
+  });
+  
+  // Send match notification
+  await sendMessage(
+    chatId,
+    `🎉 It's a Match with ${AI_GIRL.name}!\n\n` +
+    `💬 Your 3-minute free chat has started!\n\n` +
+    `Chat directly here - she'll respond to your messages!\n\n` +
+    `⏰ After 3 minutes, you can buy Daily Pass (₹30) to continue chatting.`
+  );
+  
+  // AI girl sends first message
+  await simulateTyping();
+  const firstMessage = getAIResponse('', 0, 180);
+  await sendMessage(chatId, `💬 ${AI_GIRL.name}: ${firstMessage}`);
+}
+
+/**
+ * Handle AI girl chat messages
+ */
+async function handleAIChatMessage(chatId, userMessage) {
+  const session = aiChatSessions.get(chatId);
+  
+  if (!session) {
+    return false; // No active AI session
+  }
+  
+  const elapsed = Date.now() - session.startTime;
+  const timeLeft = Math.floor((session.timeLimit - elapsed) / 1000);
+  
+  // Check if session expired
+  if (elapsed >= session.timeLimit) {
+    aiChatSessions.delete(chatId);
+    
+    const passButton = {
+      inline_keyboard: [[
+        { text: '💳 Buy Daily Pass (₹30) - Continue Chat', callback_data: 'buy_pass' }
+      ], [
+        { text: '🏠 Back to Menu', callback_data: 'back_to_menu' }
+      ]]
+    };
+    
+    await sendInlineKeyboard(
+      chatId,
+      `⏰ Your 3-minute free chat has ended!\n\n` +
+      `Want to continue chatting with ${AI_GIRL.name}?\n\n` +
+      `Get a Daily Pass for ₹30 and keep the conversation going! 💕`,
+      passButton
+    );
+    
+    return true;
+  }
+  
+  // Warn at 30 seconds remaining
+  if (timeLeft <= 30 && !session.hasWarned) {
+    session.hasWarned = true;
+    await sendMessage(chatId, `⏰ 30 seconds left in your free chat!`);
+  }
+  
+  // Generate AI response
+  await simulateTyping();
+  const response = getAIResponse(userMessage, session.messageCount, timeLeft);
+  session.messageCount++;
+  
+  await sendMessage(chatId, `💬 ${AI_GIRL.name}: ${response}`);
+  
+  return true;
+}
+
