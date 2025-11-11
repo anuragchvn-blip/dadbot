@@ -216,27 +216,28 @@ async function handleOnboardingResponse(chatId, text, message) {
       
       case 'location':
         state.location = text;
+        state.step = 'gender';
+        onboardingState.set(chatId, state);
         
-        // Create user with required fields
-        await createOrUpdateUser(chatId, {
-          name: state.name,
-          age: state.age,
-          location: state.location,
-          email_verified: false,
-          banned: false
-        });
+        // Ask for gender with buttons
+        const genderButtons = {
+          inline_keyboard: [
+            [
+              { text: '👨 Male', callback_data: 'gender_male' },
+              { text: '👩 Female', callback_data: 'gender_female' }
+            ]
+          ]
+        };
         
-        onboardingState.delete(chatId);
-        
-        await sendMessage(
+        await sendInlineKeyboard(
           chatId,
-          `✅ Profile created successfully!\n\n` +
-          `Welcome to DonutDot, ${state.name}! 🎉\n\n` +
-          `🎁 Surprise! You have an instant match!`
+          `What's your gender?`,
+          genderButtons
         );
-        
-        // Auto-match with AI girl for demo/retention
-        await startAIChat(chatId, state.name);
+        break;
+      
+      case 'preference':
+        // This is handled via callback buttons
         break;
       
       case 'edit_bio':
@@ -548,6 +549,75 @@ async function handleCallbackQuery(callbackQuery) {
       await answerCallbackQuery(callbackQuery.id);
       const user = await getUser(chatId);
       await showMainMenu(chatId, user?.name || 'there');
+    }
+    // Gender selection
+    else if (data.startsWith('gender_')) {
+      const gender = data.split('_')[1]; // 'male' or 'female'
+      await answerCallbackQuery(callbackQuery.id);
+      
+      const state = onboardingState.get(chatId);
+      if (state) {
+        state.gender = gender;
+        state.step = 'preference';
+        onboardingState.set(chatId, state);
+        
+        // Ask for preference
+        const preferenceButtons = {
+          inline_keyboard: [
+            [
+              { text: '👩 Connect with Girls', callback_data: 'pref_female' },
+              { text: '👨 Connect with Boys', callback_data: 'pref_male' }
+            ],
+            [
+              { text: '🌈 Everyone', callback_data: 'pref_both' }
+            ]
+          ]
+        };
+        
+        await sendInlineKeyboard(
+          chatId,
+          `Who would you like to connect with?`,
+          preferenceButtons
+        );
+      }
+    }
+    // Preference selection
+    else if (data.startsWith('pref_')) {
+      const preference = data.split('_')[1]; // 'male', 'female', or 'both'
+      await answerCallbackQuery(callbackQuery.id);
+      
+      const state = onboardingState.get(chatId);
+      if (state) {
+        state.preference = preference;
+        
+        // Create user with all fields
+        await createOrUpdateUser(chatId, {
+          name: state.name,
+          age: state.age,
+          location: state.location,
+          gender: state.gender,
+          looking_for: preference,
+          email_verified: false,
+          banned: false
+        });
+        
+        onboardingState.delete(chatId);
+        
+        await sendMessage(
+          chatId,
+          `✅ Profile created successfully!\n\n` +
+          `Welcome to DonutDot, ${state.name}! 🎉`
+        );
+        
+        // Auto-match based on preference
+        if (preference === 'female' || preference === 'both') {
+          await sendMessage(chatId, `🎁 Great news! You have an instant match!`);
+          await startAIChat(chatId, state.name);
+        } else {
+          // Show main menu if looking for males only (no AI match)
+          await showMainMenu(chatId, state.name);
+        }
+      }
     }
   } catch (error) {
     console.error('Callback query error:', error);

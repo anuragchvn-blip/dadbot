@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   age INTEGER NOT NULL,
   location TEXT NOT NULL,
+  gender TEXT, -- 'male', 'female', 'other'
+  looking_for TEXT, -- 'male', 'female', 'both'
   university TEXT,
   bio TEXT,
   email_verified BOOLEAN DEFAULT FALSE,
