@@ -369,13 +369,17 @@ async function handleMatches(chatId) {
  */
 async function handleBuyPass(chatId) {
   try {
+    console.log(`[/pass] Creating payment link for chatId: ${chatId}`);
     const amountPaise = parseInt(process.env.DAILY_PASS_AMOUNT_PAISA || '3000', 10);
+    console.log(`[/pass] Amount: ${amountPaise} paise`);
     
     const paymentLink = await createPaymentLink({
       tgId: chatId,
       amountPaise,
       description: 'DonutDot Daily Pass - 2 min timed chat'
     });
+    
+    console.log(`[/pass] Payment link created: ${paymentLink.short_url}`);
     
     await sendMessage(
       chatId,
@@ -386,7 +390,8 @@ async function handleBuyPass(chatId) {
     );
   } catch (error) {
     console.error('Buy pass error:', error);
-    await sendMessage(chatId, '❌ Failed to create payment link. Please try again later.');
+    console.error('Error stack:', error.stack);
+    await sendMessage(chatId, `❌ Failed to create payment link. Error: ${error.message}\nPlease try again later.`);
   }
 }
 
