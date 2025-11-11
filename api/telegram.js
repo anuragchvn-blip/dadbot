@@ -124,23 +124,41 @@ async function handleCommand(chatId, text, message) {
 }
 
 /**
+ * Show main menu with inline buttons
+ */
+async function showMainMenu(chatId, name = 'there') {
+  const menuButtons = {
+    inline_keyboard: [
+      [
+        { text: '🔍 Browse Profiles', callback_data: 'menu_browse' },
+        { text: '💕 My Matches', callback_data: 'menu_matches' }
+      ],
+      [
+        { text: '👤 My Profile', callback_data: 'menu_profile' },
+        { text: '💳 Buy Pass (₹30)', callback_data: 'menu_pass' }
+      ],
+      [
+        { text: '❓ Help', callback_data: 'menu_help' }
+      ]
+    ]
+  };
+  
+  await sendInlineKeyboard(
+    chatId,
+    `👋 Welcome back, ${name}!\n\nWhat would you like to do?`,
+    menuButtons
+  );
+}
+
+/**
  * /start - Begin onboarding or welcome back
  */
 async function handleStart(chatId, message) {
   const user = await getUser(chatId);
   
   if (user && user.name && user.age && user.location) {
-    // User already onboarded
-    await sendMessage(
-      chatId,
-      `👋 Welcome back, ${user.name}!\n\n` +
-      `Use these commands:\n` +
-      `/browse - Browse profiles\n` +
-      `/matches - View your matches\n` +
-      `/profile - Edit your profile\n` +
-      `/pass - Buy a Daily Pass (₹30)\n` +
-      `/verify_email - Verify university email`
-    );
+    // User already onboarded - show menu
+    await showMainMenu(chatId, user.name);
   } else {
     // Start onboarding
     onboardingState.set(chatId, { step: 'name' });
@@ -202,13 +220,12 @@ async function handleOnboardingResponse(chatId, text, message) {
         
         await sendMessage(
           chatId,
-          `✅ Profile created!\n\n` +
-          `You can now:\n` +
-          `/browse - Start browsing profiles\n` +
-          `/profile - Add bio or university\n` +
-          `/pass - Buy Daily Pass for timed chats (₹30)\n` +
-          `/verify_email - Verify university email for verified badge`
+          `✅ Profile created successfully!\n\n` +
+          `Welcome to DonutDot, ${state.name}! 🎉`
         );
+        
+        // Show main menu
+        await showMainMenu(chatId, state.name);
         break;
       
       case 'edit_bio':
@@ -414,21 +431,28 @@ async function handleVerifyEmailStart(chatId) {
  * /help - Show help
  */
 async function handleHelp(chatId) {
-  await sendMessage(
+  const backButton = {
+    inline_keyboard: [[
+      { text: '🏠 Back to Menu', callback_data: 'back_to_menu' }
+    ]]
+  };
+  
+  await sendInlineKeyboard(
     chatId,
-    `🍩 DonutDot Bot (@DonutDot_bot) Commands:\n\n` +
-    `/start - Start or restart\n` +
-    `/profile - View/edit your profile\n` +
-    `/browse - Browse profiles\n` +
-    `/matches - View your matches\n` +
-    `/pass - Buy Daily Pass (₹30)\n` +
-    `/verify_email - Verify university email\n` +
-    `/help - Show this help\n\n` +
-    `How it works:\n` +
-    `1. Browse profiles and Like or Pass\n` +
-    `2. When you both Like each other = Match! 💕\n` +
-    `3. Buy a Daily Pass to start a 2-min timed chat\n` +
-    `4. Or play anonymous Truth/Dare 🎭`
+    `🍩 *DonutDot Bot Guide*\n\n` +
+    `*How it works:*\n` +
+    `1️⃣ Browse profiles using the menu\n` +
+    `2️⃣ Like or Pass on profiles\n` +
+    `3️⃣ When you both Like = Match! 💕\n` +
+    `4️⃣ Get 3 free minutes to chat\n` +
+    `5️⃣ Buy Daily Pass (₹30) to continue chatting\n\n` +
+    `*Features:*\n` +
+    `• Text-only matchmaking\n` +
+    `• Timed chat sessions\n` +
+    `• Anonymous Truth/Dare 🎭\n` +
+    `• University email verification\n\n` +
+    `Use the menu buttons or type /start`,
+    backButton
   );
 }
 
@@ -482,6 +506,37 @@ async function handleCallbackQuery(callbackQuery) {
     else if (data === 'verify_email_prompt') {
       await answerCallbackQuery(callbackQuery.id);
       await handleVerifyEmailStart(chatId);
+    }
+    // Buy Daily Pass
+    else if (data === 'buy_pass') {
+      await answerCallbackQuery(callbackQuery.id);
+      await handleBuyPass(chatId);
+    }
+    // Main menu actions
+    else if (data === 'menu_browse') {
+      await answerCallbackQuery(callbackQuery.id);
+      await handleBrowse(chatId);
+    }
+    else if (data === 'menu_matches') {
+      await answerCallbackQuery(callbackQuery.id);
+      await handleMatches(chatId);
+    }
+    else if (data === 'menu_profile') {
+      await answerCallbackQuery(callbackQuery.id);
+      await handleProfile(chatId);
+    }
+    else if (data === 'menu_pass') {
+      await answerCallbackQuery(callbackQuery.id);
+      await handleBuyPass(chatId);
+    }
+    else if (data === 'menu_help') {
+      await answerCallbackQuery(callbackQuery.id);
+      await handleHelp(chatId);
+    }
+    else if (data === 'back_to_menu') {
+      await answerCallbackQuery(callbackQuery.id);
+      const user = await getUser(chatId);
+      await showMainMenu(chatId, user?.name || 'there');
     }
   } catch (error) {
     console.error('Callback query error:', error);
@@ -544,22 +599,28 @@ async function handleLike(chatId, targetId, callbackQueryId, messageId) {
           );
         }
       } else {
-        // No pass available
+        // No pass available - show button to buy pass
         const currentUser = await getUser(chatId);
         const targetUser = await getUser(targetId);
         
-        await sendMessage(
+        const passButton = {
+          inline_keyboard: [[
+            { text: '💳 Buy Daily Pass (₹30)', callback_data: 'buy_pass' }
+          ]]
+        };
+        
+        await sendInlineKeyboard(
           chatId,
           `🎉 It's a Match with ${targetUser.name}!\n\n` +
-          `To start a timed chat, buy a Daily Pass:\n` +
-          `/pass`
+          `To start a 3-minute timed chat, get a Daily Pass:`,
+          passButton
         );
         
-        await sendMessage(
+        await sendInlineKeyboard(
           targetId,
           `🎉 You matched with ${currentUser.name}!\n\n` +
-          `To start a timed chat, buy a Daily Pass:\n` +
-          `/pass`
+          `To start a 3-minute timed chat, get a Daily Pass:`,
+          passButton
         );
       }
       
